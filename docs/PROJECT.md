@@ -9,7 +9,7 @@ One bounded exchange at a time: record a complete utterance, process it, speak t
 ### 01. A synchronous voice assistant
 
 ![Phase 1 - 2 pipeline](phase_1-2.svg)
-
+feat: Voice Agent in a complete synchronous flow that record the utterance, transcribe, send to the LLM, synthe
 - [x] Record a complete utterance
 - [x] Transcribe it
 - [x] Send the transcript to the LLM which will be able to call some tools
@@ -20,8 +20,8 @@ Learn: model APIs, audio formats, input/output contracts.
 
 ### 02. Streaming LLM output and TTS
 
-- [ ] Generate response text incrementally
-- [ ] Synthesize complete sentences or suitable chunks as they become available
+- [x] Generate response text incrementally
+- [x] Synthesize complete sentences or suitable chunks as they become available
 
 Learn: async generators, buffering, chunk boundaries, latency.
 

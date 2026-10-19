@@ -31,8 +31,9 @@ def main() -> None:
     print(transcript)
     print("2", (mid2 := time()) - mid1)
 
-    reply = agent.run(transcript)
     print("3", (mid3 := time()) - mid2)
-    print(reply)
-    play(tts_model.synthesize(reply))
+    for reply in agent.run(transcript):
+        print(reply)
+        play(tts_model.synthesize(reply))
+
     print("4", time() - mid3)

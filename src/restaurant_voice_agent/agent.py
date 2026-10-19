@@ -1,4 +1,6 @@
+import re
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, override
@@ -63,7 +65,7 @@ class LLMResponse:
 
 class LLMAdapter(ABC):
     @abstractmethod
-    def respond(self, history: list[Message], tools: list[dict[str, Any]], system: str) -> LLMResponse:
+    def respond(self, history: list[Message], tools: list[dict[str, Any]], system: str) -> Iterator[LLMResponse]:
         ...
 
 
@@ -72,28 +74,34 @@ class LLMOllama(LLMAdapter):
         self.model: str = model
 
     @override
-    def respond(self, history: list[Message], tools: list[dict[str, Any]], system: str) -> LLMResponse:
+    def respond(
+        self,
+        history: list[Message],
+        tools: list[dict[str, Any]],
+        system: str
+    ) -> Iterator[LLMResponse]:
         import ollama
 
         messages = [{"role": "system", "content": system}]
         messages.extend(self._to_ollama_message(message) for message in history)
         ollama_tools = [self._to_ollama_tool(tool) for tool in tools]
 
-        response = ollama.chat(model=self.model, messages=messages, tools=ollama_tools)
-        message = response.message
+        for chunk in ollama.chat(model=self.model, messages=messages, tools=ollama_tools, stream=True):
+            message = chunk.message
+            if message.tool_calls:
+                calls = [
+                    ToolCall(
+                        id=call.function.name,
+                        name=call.function.name,
+                        arguments=dict(call.function.arguments)
+                    )
+                    for call in message.tool_calls
+                ]
+                yield LLMResponse(tool_calls=calls)
+                return
 
-        if message.tool_calls:
-            calls = [
-                ToolCall(
-                    id=call.function.name,
-                    name=call.function.name,
-                    arguments=dict(call.function.arguments)
-                )
-                for call in message.tool_calls
-            ]
-            return LLMResponse(tool_calls=calls)
-
-        return LLMResponse(text=message.content or "")
+            if message.content:
+                yield LLMResponse(text=message.content)
 
     @staticmethod
     def _to_ollama_tool(tool: dict[str, Any]) -> dict[str, Any]:
@@ -124,6 +132,8 @@ class LLMOllama(LLMAdapter):
         return {"role": message.role.value, "content": message.content}
 
 
+_SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s*")
+
 class Agent:
     def __init__(self, model: LLMAdapter, tools: dict[str, Tool], system_prompt: str = DEFAULT_SYSTEM_PROMPT):
         self.model: LLMAdapter = model
@@ -132,27 +142,52 @@ class Agent:
         self.system_prompt: str = system_prompt
         self.history: list[Message] = []
 
-    def run(self, user_text: str) -> str:
+    # def run(self, user_text: str, stream: bool = False) -> str | Iterator[str]:
+    #    sentences = self._run_stream(user_text)
+    #    return sentences if stream else "".join(sentences)
+
+    def run(self, user_text: str) -> Iterator[str]:
         self.history.append(Message(role=MessageRole.USER, content=user_text))
 
         consecutive_failures = 0
         while True:
-            response = self.model.respond(self.history, self.tool_schemas, self.system_prompt)
+            buffer = ""
+            full_text = ""
+            tool_calls: list[ToolCall] = []
 
-            if not response.is_tool_call:
-                text = response.text or ""
-                self.history.append(Message(role=MessageRole.ASSISTANT, content=text))
-                return text
+            for piece in self.model.respond(self.history, self.tool_schemas, self.system_prompt):
+                if piece.is_tool_call:
+                    tool_calls = piece.tool_calls
+                    break
 
-            if self._run_tools(response.tool_calls):
-                consecutive_failures = 0
+                full_text += piece.text or ""
+                buffer += piece.text or ""
+                sentences, buffer = self._split_sentences(buffer)
+                yield from sentences
+
+            if tool_calls:
+                if self._run_tools(tool_calls):
+                    consecutive_failures = 0
+                    continue
+
+                consecutive_failures += 1
+                if consecutive_failures >= MAX_CONSECUTIVE_TOOL_FAILURES:
+                    fallback = "Sorry, I'm having trouble with that right now."
+                    self.history.append(Message(role=MessageRole.ASSISTANT, content=fallback))
+                    yield fallback
+                    return
                 continue
 
-            consecutive_failures += 1
-            if consecutive_failures >= MAX_CONSECUTIVE_TOOL_FAILURES:
-                fallback = "Sorry, I'm having trouble with that right now."
-                self.history.append(Message(role=MessageRole.ASSISTANT, content=fallback))
-                return fallback
+            if buffer:
+                yield buffer
+
+            self.history.append(Message(role=MessageRole.ASSISTANT, content=full_text))
+            return
+
+    @staticmethod
+    def _split_sentences(buffer: str) -> tuple[list[str], str]:
+        *complete, remainder = _SENTENCE_BOUNDARY.split(buffer)
+        return [s for s in complete if s], remainder
 
     def _run_tools(self, calls: list[ToolCall]) -> bool:
         # Must be a list, not a generator: any() short-circuits on the first True,
