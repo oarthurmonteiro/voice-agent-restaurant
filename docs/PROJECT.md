@@ -6,9 +6,10 @@ Build in different milestones, not all at once. Each one delivers something inde
 
 One bounded exchange at a time: record a complete utterance, process it, speak the response, then wait for the next one. Streaming in milestone 2 makes that single exchange feel faster, it does not change the turn-based shape.
 
+![Phase 1 - 2 pipeline](phase_1-2.svg)
+
 ### 01. A synchronous voice assistant
 
-![Phase 1 - 2 pipeline](phase_1-2.svg)
 feat: Voice Agent in a complete synchronous flow that record the utterance, transcribe, send to the LLM, synthe
 - [x] Record a complete utterance
 - [x] Transcribe it
@@ -29,7 +30,28 @@ Learn: async generators, buffering, chunk boundaries, latency.
 
 A genuinely different architecture, not just a faster version of phase 1-2: audio is captured continuously instead of push-to-talk, VAD decides where a turn starts and ends instead of a button, the user can interrupt mid-response, and the LLM's output streams straight through to audio instead of waiting for a complete reply.
 
+![Phase 3 - 5 pipeline](phase_3-5.svg)
+
 ### 03. Continuous audio and VAD
+
+VAD Flowchart
+```mermaid
+flowchart TD
+    A[Capture audio frame] --> B{In utterance?}
+    B -- No --> C{Speech in this frame?}
+    C -- No --> A
+    C -- Yes --> D[Start buffer, append frame, in_utterance = true]
+    D --> A
+    B -- Yes --> E[Append frame to buffer]
+    E --> F{Speech in this frame?}
+    F -- Yes --> G[Reset silence timer]
+    G --> A
+    F -- No --> H{Silence > threshold?}
+    H -- No --> A
+    H -- Yes --> I[in_utterance = false, finalize buffer]
+    I --> J[Send buffer to STT Adapter]
+    J --> K[STT to Agent/LLM]
+```
 
 - [ ] Keep capturing microphone audio
 - [ ] Detect speech segments
