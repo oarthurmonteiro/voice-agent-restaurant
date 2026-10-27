@@ -1,0 +1,27 @@
+[project]
+name = "restaurant-voice-agent"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "faster-whisper>=1.2.1",
+    "ollama>=0.6.3",
+    "piper-tts>=1.8.0",
+    "pydantic>=2.14.1",
+    "sounddevice>=0.5.6",
+    "soxr>=1.1.0",
+]
+
+[project.scripts]
+restaurant-voice-agent = "restaurant_voice_agent.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.12.22,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "basedpyright>=1.40.2",
+    "ruff>=0.17.1",
+]
