@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 
-import numpy as np
 from faster_whisper import WhisperModel
+
+from restaurant_voice_agent.audio import pcm_to_float32
 
 
 class STTAdapter(ABC):
@@ -20,7 +21,7 @@ class STTWhisper(STTAdapter):
         )
 
     def transcribe(self, audio_buffer: bytes, language: str) -> str:
-        samples = np.frombuffer(audio_buffer, dtype=np.int16).astype(np.float32) / 32768.0
+        samples = pcm_to_float32(audio_buffer)
 
         segments, info = self.model.transcribe(
             samples,

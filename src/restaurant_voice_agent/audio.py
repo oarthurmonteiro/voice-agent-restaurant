@@ -1,6 +1,7 @@
 import sys
 import threading
 
+import numpy as np
 import sounddevice as sd
 
 from restaurant_voice_agent.constants import CANONICAL_SAMPLE_RATE
@@ -19,6 +20,7 @@ def _wait_for_enter(stop_event: threading.Event) -> None:
 def record() -> bytes:
     stop_event = threading.Event()
     listener = threading.Thread(target=_wait_for_enter, args=(stop_event,), daemon=True)
+    print("Recording... press Enter to stop.")
 
     chunks: list[bytes] = []
     with sd.RawInputStream(samplerate=CANONICAL_SAMPLE_RATE, channels=CHANNELS, dtype="int16") as stream:
@@ -34,3 +36,9 @@ def record() -> bytes:
 def play(audio: bytes) -> None:
     with sd.RawOutputStream(samplerate=CANONICAL_SAMPLE_RATE, channels=CHANNELS, dtype="int16") as stream:
         stream.write(audio)
+
+def pcm_to_int16(data: bytes) -> np.ndarray:
+    return np.frombuffer(data, dtype=np.int16)
+
+def pcm_to_float32(data: bytes) -> np.ndarray:
+    return pcm_to_int16(data).astype(np.float32) / 32768.0
